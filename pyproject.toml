@@ -1,0 +1,14 @@
+[project]
+name = "ontologist"
+version = "0.1.0"
+description = "Pass 1 ontology/schema candidate generation pipeline."
+requires-python = ">=3.11"
+dependencies = [
+  "chromadb",
+  "groq",
+  "openai",
+  "sentence-transformers",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

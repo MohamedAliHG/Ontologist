@@ -1,0 +1,11 @@
+[llm]
+provider = "groq"
+model = "llama-3.1-8b-instant"
+base_url = ""
+
+[consolidation]
+threshold = 0.82
+embedding_model = "all-MiniLM-L6-v2"
+
+[chroma]
+order_field = "chunk_index"
