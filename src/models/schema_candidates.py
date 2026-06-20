@@ -49,13 +49,24 @@ class RawRelationship:
 
 @dataclass
 class ConsolidationDecision:
-    """Audit-log entry for one class consolidation decision."""
+    """Audit-log entry for one consolidation decision."""
 
-    raw_class: RawClass
-    decision_type: Literal["exact_match", "embedding_merge", "new_class"]
+    decision_type: Literal[
+        "exact_match",
+        "embedding_merge",
+        "new_class",
+        "new_relationship_type",
+    ]
+    subject_type: Literal["class", "relationship_type"] = "class"
+    raw_class: RawClass | None = None
     resulting_class_id: str | None = None
     matched_class_id: str | None = None
     matched_class_name: str | None = None
+    raw_relationship_type: str | None = None
+    resulting_relationship_type: str | None = None
+    matched_relationship_type: str | None = None
+    domain_class: str | None = None
+    range_class: str | None = None
     similarity_score: float | None = None
     threshold: float | None = None
 

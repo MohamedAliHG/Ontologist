@@ -4,9 +4,10 @@ from pathlib import Path
 from typing import Any
 import tomllib
 
-DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"
+DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 DEFAULT_SIMILARITY_THRESHOLD = 0.82
-DEFAULT_EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
+DEFAULT_EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
+DEFAULT_LLM_TEMPERATURE = 0.0
 
 DEFAULT_VALIDATION_RETRIES = 3
 DEFAULT_API_RETRIES = 3

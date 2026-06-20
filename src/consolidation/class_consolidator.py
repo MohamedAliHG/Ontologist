@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import os
 import re
 import string
 from dataclasses import replace
@@ -59,6 +58,7 @@ def consolidate_raw_classes(
     new_raw_classes: list["RawClass"],
     consolidated_classes: dict[str, "ConsolidatedClass"],
     threshold: float,
+    embedding_model_name: str = DEFAULT_EMBEDDING_MODEL_NAME,
 ) -> tuple[dict[str, "ConsolidatedClass"], list["ConsolidationDecision"]]:
     """Merge newly proposed raw classes into consolidated classes.
 
@@ -66,6 +66,7 @@ def consolidate_raw_classes(
         new_raw_classes: RawClass proposals from one chunk extraction.
         consolidated_classes: Current canonical classes keyed by id.
         threshold: Minimum cosine similarity for embedding-based merge.
+        embedding_model_name: Sentence-transformers model to reuse for embeddings.
 
     Returns:
         A new consolidated_classes dict plus new ConsolidationDecision entries.
@@ -94,7 +95,7 @@ def consolidate_raw_classes(
             )
             continue
 
-        new_embedding = _embed_raw_class(raw_class)
+        new_embedding = _embed_raw_class(raw_class, embedding_model_name)
         best_class_id, best_similarity = _find_best_embedding_match(
             new_embedding,
             updated,
@@ -272,10 +273,12 @@ def cosine_similarity(left: list[float], right: list[float]) -> float:
     return dot_product / (left_norm * right_norm)
 
 
-def _embed_raw_class(raw_class: "RawClass") -> list[float]:
+def _embed_raw_class(
+    raw_class: "RawClass",
+    embedding_model_name: str,
+) -> list[float]:
     text = f"{raw_class.name}. {raw_class.description}"
-    model_name = os.getenv("SCHEMA_CLASS_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL_NAME)
-    model = initialize_embedding_model(model_name)
+    model = initialize_embedding_model(embedding_model_name)
     embedding = model.encode(text, normalize_embeddings=True)
     if hasattr(embedding, "tolist"):
         embedding = embedding.tolist()

@@ -2,19 +2,22 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 from typing import Any
 
 from config.settings import (
     DEFAULT_EMBEDDING_MODEL_NAME,
     DEFAULT_GROQ_MODEL,
+    DEFAULT_LLM_TEMPERATURE,
     DEFAULT_SIMILARITY_THRESHOLD,
     config_get,
     load_pass1_config,
 )
 from consolidation.class_consolidator import consolidate_raw_classes
 from export.schema_profile_exporter import export_schema_profile
-from extraction.chunk_llm_extractor import extract_schema_candidates_for_chunk
+from extraction.chunk_llm_extractor import (
+    extract_schema_candidates_for_chunk,
+    make_llm_client,
+)
 from models import PipelineState
 
 
@@ -26,6 +29,7 @@ def process_chunks(
     threshold: float,
     *,
     extraction_kwargs: dict[str, Any] | None = None,
+    embedding_model_name: str = DEFAULT_EMBEDDING_MODEL_NAME,
 ) -> PipelineState:
     """Process chunks in order into a fully populated PipelineState."""
 
@@ -51,6 +55,7 @@ def process_chunks(
             new_raw_classes=extraction.raw_classes,
             consolidated_classes=state.consolidated_classes,
             threshold=threshold,
+            embedding_model_name=embedding_model_name,
         )
         state.consolidated_classes = updated_classes
         state.consolidation_log.extend(consolidation_entries)
@@ -117,10 +122,15 @@ def main() -> None:
         help="Explicit metadata field passed through to the Chroma chunk loader",
     )
     parser.add_argument(
+        "--batch-size",
+        type=int,
+        help="Records to fetch per Chroma page",
+    )
+    parser.add_argument(
         "--threshold",
         type=float,
         help=(
-            "Cosine similarity threshold for class embedding merges "
+            "Cosine similarity threshold for class and relationship-type embedding merges "
             f"(default: {DEFAULT_SIMILARITY_THRESHOLD})"
         ),
     )
@@ -143,6 +153,11 @@ def main() -> None:
         help="OpenAI-compatible base URL for local or custom endpoints",
     )
     parser.add_argument(
+        "--temperature",
+        type=float,
+        help=f"LLM sampling temperature (default: {DEFAULT_LLM_TEMPERATURE})",
+    )
+    parser.add_argument(
         "--embedding-model",
         help=(
             "Sentence-transformers model for class consolidation "
@@ -162,6 +177,11 @@ def main() -> None:
 
     run_config = load_pass1_config(args.config)
     order_field = args.order_field or config_get(run_config, "chroma", "order_field")
+    batch_size = (
+        args.batch_size
+        if args.batch_size is not None
+        else config_get(run_config, "chroma", "batch_size")
+    )
     threshold = (
         args.threshold
         if args.threshold is not None
@@ -175,28 +195,41 @@ def main() -> None:
     provider = args.provider or config_get(run_config, "llm", "provider", "groq")
     model = args.model or config_get(run_config, "llm", "model", DEFAULT_GROQ_MODEL)
     base_url = args.base_url or config_get(run_config, "llm", "base_url")
+    temperature = (
+        args.temperature
+        if args.temperature is not None
+        else config_get(run_config, "llm", "temperature", DEFAULT_LLM_TEMPERATURE)
+    )
     embedding_model = args.embedding_model or config_get(
         run_config,
         "consolidation",
         "embedding_model",
         DEFAULT_EMBEDDING_MODEL_NAME,
     )
-    os.environ["SCHEMA_CLASS_EMBEDDING_MODEL"] = embedding_model
 
     from loading.chroma_chunk_loader import load_chunks_from_chromadb
+
+    loader_kwargs = {}
+    if batch_size is not None:
+        loader_kwargs["batch_size"] = int(batch_size)
 
     chunks = load_chunks_from_chromadb(
         chromadb_path=args.chromadb_path,
         collection_name=args.collection_name,
         namespace=args.namespace,
         order_field=order_field,
+        **loader_kwargs,
+    )
+    llm_client = make_llm_client(
+        provider=provider,
+        base_url=base_url,
     )
     extraction_kwargs = {
         key: value
         for key, value in {
-            "provider": provider,
+            "client": llm_client,
             "model": model,
-            "base_url": base_url,
+            "temperature": temperature,
         }.items()
         if value is not None
     }
@@ -204,11 +237,14 @@ def main() -> None:
         chunks=chunks,
         threshold=threshold,
         extraction_kwargs=extraction_kwargs,
+        embedding_model_name=embedding_model,
     )
     export_result = export_schema_profile(
         state=state,
         output_dir=args.output_dir,
         document_id=args.document_id,
+        relationship_type_threshold=threshold,
+        relationship_type_embedding_model_name=embedding_model,
     )
 
     print(f"Processed chunks: {len(chunks)}")

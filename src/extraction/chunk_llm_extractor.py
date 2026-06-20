@@ -55,6 +55,7 @@ def extract_schema_candidates_for_chunk(
     api_retries: int = DEFAULT_API_RETRIES,
     validation_backoff_seconds: float = 0.5,
     api_backoff_seconds: float = 1.0,
+    temperature: float = 0,
     sleep: Callable[[float], None] = time.sleep,
 ) -> ChunkExtractionResult:
     """Extract raw candidates from one chunk without mutating pipeline state.
@@ -73,6 +74,7 @@ def extract_schema_candidates_for_chunk(
         api_retries: Number of transient API attempts per validation attempt.
         validation_backoff_seconds: Backoff between validation retries.
         api_backoff_seconds: Base exponential backoff for transient API errors.
+        temperature: LLM sampling temperature.
         sleep: Sleep function, injectable for tests.
 
     Returns:
@@ -103,6 +105,7 @@ def extract_schema_candidates_for_chunk(
                 prompt=prompt,
                 api_retries=api_retries,
                 api_backoff_seconds=api_backoff_seconds,
+                temperature=temperature,
                 sleep=sleep,
             )
             payload = _parse_and_validate_response(response_text, state=state)
@@ -138,6 +141,16 @@ def extract_schema_candidates_for_chunk(
         chunk_idx,
     )
     return ChunkExtractionResult()
+
+
+def make_llm_client(
+    provider: str = "groq",
+    base_url: str | None = None,
+    api_key: str | None = None,
+) -> Any:
+    """Create one reusable OpenAI-compatible chat client for a pipeline run."""
+
+    return _make_client(provider=provider, base_url=base_url, api_key=api_key)
 
 
 def _make_client(
@@ -196,6 +209,7 @@ def _call_llm_with_api_retries(
     prompt: str,
     api_retries: int,
     api_backoff_seconds: float,
+    temperature: float,
     sleep: Callable[[float], None],
 ) -> str:
     for attempt in range(1, api_retries + 1):
@@ -207,7 +221,7 @@ def _call_llm_with_api_retries(
                     {"role": "user", "content": prompt},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0,
+                temperature=temperature,
             )
             content = response.choices[0].message.content
             if not isinstance(content, str) or not content.strip():
